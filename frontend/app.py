@@ -1,44 +1,47 @@
-import streamlit as st
+# -*- coding: utf-8 -*-
+
 import logging
+import streamlit as st
 
 # --------------------------------------------------
-# Basic logging setup (frontend-safe)
+# Logging setup (frontend-safe)
 # --------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
+    format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
     """
     Frontend entry point.
-    Handles only:
-    - Page configuration
-    - Sidebar navigation
-    - Page routing
 
-    NO backend calls
-    NO business logic
+    Responsibilities:
+    - App configuration
+    - Sidebar navigation
+    - Safe page routing
+
+    ❌ No backend calls
+    ❌ No business logic
     """
 
     try:
         # --------------------------------------------------
-        # Page configuration
+        # Page configuration (MUST be first Streamlit call)
         # --------------------------------------------------
         st.set_page_config(
             page_title="LLM Flight Recorder",
             page_icon="🛫",
             layout="wide",
-            initial_sidebar_state="expanded"
+            initial_sidebar_state="expanded",
         )
 
-        logger.info("Frontend app started")
+        logger.info("Frontend application started")
 
         # --------------------------------------------------
-        # Sidebar navigation
+        # Sidebar
         # --------------------------------------------------
         st.sidebar.title("🛫 LLM Flight Recorder")
         st.sidebar.markdown("---")
@@ -48,32 +51,38 @@ def main():
             options=[
                 "Debug Dashboard",
                 "Flight Recorder",
-                "Request Details"
-            ]
+                "Request Details",
+            ],
         )
 
         st.sidebar.markdown("---")
         st.sidebar.caption("Observability for LLM systems")
 
         # --------------------------------------------------
-        # Page routing
+        # Routing
         # --------------------------------------------------
         if selected_page == "Debug Dashboard":
+            logger.info("Navigating to Debug Dashboard")
             from pages.debug_mode import render_debug_dashboard
             render_debug_dashboard()
 
         elif selected_page == "Flight Recorder":
-            st.info("Flight Recorder page will be added next.")
-            st.write("This page will replay traces step-by-step.")
+            logger.info("Navigating to Flight Recorder")
+            from pages.flight_recorder import render_flight_recorder_page
+            render_flight_recorder_page()
 
         elif selected_page == "Request Details":
-            st.info("Request Details page will be added later.")
-            st.write("This page will show prompt, response, and metrics.")
+            logger.info("Navigating to Request Details")
+            st.info("🚧 Request Details page not implemented yet.")
 
-    except Exception as e:
-        logger.exception("Unhandled exception in frontend app")
+        else:
+            logger.warning("Unknown navigation option selected")
+            st.warning("Unknown page selected.")
+
+    except Exception as exc:
+        logger.exception("Unhandled exception in frontend")
         st.error("Something went wrong in the frontend.")
-        st.exception(e)
+        st.exception(exc)
 
 
 if __name__ == "__main__":
