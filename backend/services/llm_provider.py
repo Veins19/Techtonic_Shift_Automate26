@@ -24,16 +24,15 @@ class GeminiLLMProvider:
     - Runtime correctness
     - Clean logging & latency measurement
     - Provider-agnostic response shape
-    - ZERO Pylance false positives
+    - Zero Pylance false positives
     """
 
     def __init__(self) -> None:
         settings = get_settings()
 
-        # --- IMPORTANT ---
-        # Pylance sometimes fails to detect aliased pydantic fields.
-        # getattr() is the correct, clean workaround.
-        api_key = getattr(settings, "google_api_key", None)
+        # ✅ Correct key from config.py
+        api_key = settings.gemini_api_key
+        model_name = settings.gemini_model_name
 
         if not api_key:
             raise RuntimeError(
@@ -41,23 +40,29 @@ class GeminiLLMProvider:
             )
 
         try:
-            # google-generativeai has incomplete type stubs
-            configure = getattr(genai, "configure")
-            GenerativeModel = getattr(genai, "GenerativeModel")
+            # Gemini SDK has incomplete type stubs → use getattr safely
+            configure_fn = getattr(genai, "configure", None)
+            model_cls = getattr(genai, "GenerativeModel", None)
 
-            configure(api_key=api_key)
+            if not configure_fn or not model_cls:
+                raise RuntimeError(
+                    "Gemini SDK is missing required attributes. "
+                    "Check google-generativeai installation."
+                )
 
-            self._model = GenerativeModel(
-                model_name=settings.gemini_model_name
-            )
+            # Configure API key
+            configure_fn(api_key=api_key)
+
+            # Initialize model
+            self._model = model_cls(model_name=model_name)
 
             logger.info(
-                "Gemini LLM provider initialized",
-                extra={"model": settings.gemini_model_name},
+                "Gemini provider initialized successfully",
+                extra={"model": model_name},
             )
 
         except Exception:
-            logger.exception("Failed to initialize Gemini LLM provider")
+            logger.exception("Failed to initialize Gemini provider")
             raise
 
     async def generate(
@@ -68,10 +73,15 @@ class GeminiLLMProvider:
         max_output_tokens: int = 1024,
     ) -> Dict[str, Any]:
         """
-        Generate a response from Gemini.
+        Generate response from Gemini.
 
-        Returns a normalized dict so upper layers
-        never depend on Gemini SDK internals.
+        Returns provider-neutral dict:
+        {
+          text,
+          latency_ms,
+          provider,
+          model
+        }
         """
         start = time.perf_counter()
 
@@ -109,11 +119,11 @@ class GeminiLLMProvider:
                 "latency_ms": latency_ms,
                 "provider": "gemini",
                 "model": self._model.model_name,
-                "raw": response,
             }
 
         except GoogleAPIError as e:
             latency_ms = int((time.perf_counter() - start) * 1000)
+
             logger.exception(
                 "Gemini API error",
                 extra={"latency_ms": latency_ms},
@@ -122,8 +132,9 @@ class GeminiLLMProvider:
 
         except Exception as e:
             latency_ms = int((time.perf_counter() - start) * 1000)
+
             logger.exception(
-                "Unexpected Gemini error",
+                "Unexpected Gemini failure",
                 extra={"latency_ms": latency_ms},
             )
             raise LLMProviderError("Unexpected Gemini failure") from e

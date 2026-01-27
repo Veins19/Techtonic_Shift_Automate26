@@ -1,4 +1,14 @@
 venv/
 __pycache__/
 *.pyc
+<<<<<<< HEAD
+=======
+.venv/
+env/
+venv
+# Environment variables
+.env
+
+# OS
+>>>>>>> d00a7f0 (Backend complete: Gemini + Mongo + Cache + Monitor APIs)
 .DS_Store
