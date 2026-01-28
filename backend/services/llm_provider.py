@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, AsyncGenerator
 
 import google.generativeai as genai
 
@@ -20,6 +20,7 @@ class GeminiLLMProvider:
     Google Gemini LLM provider wrapper using google-generativeai SDK.
     
     Works with free tier API keys.
+    Supports both streaming and non-streaming generation.
     """
 
     def __init__(self) -> None:
@@ -58,7 +59,7 @@ class GeminiLLMProvider:
         max_output_tokens: int = 1024,
     ) -> Dict[str, Any]:
         """
-        Generate response from Gemini.
+        Generate response from Gemini (non-streaming).
 
         Returns provider-neutral dict:
         {
@@ -116,3 +117,49 @@ class GeminiLLMProvider:
                 extra={"latency_ms": latency_ms, "error": str(e)},
             )
             raise LLMProviderError(f"Gemini API error: {str(e)}") from e
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        *,
+        temperature: float = 0.7,
+        max_output_tokens: int = 1024,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Generate response from Gemini with streaming.
+
+        Yields chunks of text as they are generated.
+        """
+        try:
+            logger.info(
+                "Gemini streaming generation started",
+                extra={
+                    "prompt_length": len(prompt),
+                    "temperature": temperature,
+                    "max_output_tokens": max_output_tokens,
+                },
+            )
+
+            # Generate content with streaming
+            response = self._model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": temperature,
+                    "max_output_tokens": max_output_tokens,
+                },
+                stream=True,
+            )
+
+            # Yield chunks as they arrive
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+
+            logger.info("Gemini streaming generation completed")
+
+        except Exception as e:
+            logger.exception(
+                "Gemini streaming API error",
+                extra={"error": str(e)},
+            )
+            raise LLMProviderError(f"Gemini streaming API error: {str(e)}") from e
