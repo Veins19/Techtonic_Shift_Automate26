@@ -7,6 +7,7 @@ from uuid import uuid4
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.config import get_settings
@@ -28,6 +29,7 @@ class ChatRequest(BaseModel):
     Incoming user chat request.
     """
     message: str = Field(..., min_length=1, description="User message")
+    stream: bool = Field(default=False, description="Enable streaming response")
     session_id: Optional[str] = Field(
         default=None,
         description="Optional session identifier for grouping conversations",
@@ -55,6 +57,7 @@ def _mock_llm_reply(user_message: str) -> str:
     trimmed = user_message.strip()
     if not trimmed:
         return "Please send a message."
+    
     return (
         "✅ [MOCK MODE]\n\n"
         f"You said: {trimmed}\n\n"
@@ -63,13 +66,40 @@ def _mock_llm_reply(user_message: str) -> str:
     )
 
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest) -> ChatResponse:
+async def _stream_generator(prompt: str, trace_id: str):
+    """
+    Generator for streaming responses.
+    Yields Server-Sent Events (SSE) format.
+    """
+    settings = get_settings()
+    
+    try:
+        if settings.use_mock_llm:
+            # Mock streaming - simulate word-by-word
+            import asyncio
+            words = _mock_llm_reply(prompt).split()
+            for word in words:
+                yield f"data: {word} \n\n"
+                await asyncio.sleep(0.05)  # Simulate delay
+            yield "data: [DONE]\n\n"
+        else:
+            # Real Gemini streaming
+            llm = GeminiLLMProvider()
+            async for chunk in llm.generate_stream(prompt):
+                yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+    except Exception as e:
+        logger.exception("Streaming error", extra={"trace_id": trace_id})
+        yield f"data: [ERROR: {str(e)}]\n\n"
+
+
+@router.post("/chat")
+async def chat(req: ChatRequest):
     """
     POST /chat
-
     Final behavior:
     - Mock or Gemini LLM
+    - Streaming or non-streaming
     - Semantic cache (exact match)
     - Trace persistence (non-blocking)
     """
@@ -84,6 +114,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
                 "trace_id": trace_id,
                 "session_id": req.session_id,
                 "mock": settings.use_mock_llm,
+                "stream": req.stream,
             },
         )
 
@@ -91,18 +122,32 @@ async def chat(req: ChatRequest) -> ChatResponse:
             raise HTTPException(status_code=400, detail="message is required")
 
         # ----------------------------
-        # MOCK MODE
+        # STREAMING MODE
         # ----------------------------
+        if req.stream:
+            return StreamingResponse(
+                _stream_generator(req.message, trace_id),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Trace-ID": trace_id,
+                },
+            )
+
+        # ----------------------------
+        # NON-STREAMING MODE
+        # ----------------------------
+        
+        # MOCK MODE
         if settings.use_mock_llm:
             reply_text = _mock_llm_reply(req.message)
             provider = "mock"
 
-        # ----------------------------
         # REAL LLM MODE (Gemini)
-        # ----------------------------
         else:
             provider = "gemini"
-
+            
             # 1️⃣ Check semantic cache
             cached = await semantic_cache.get(req.message)
             if cached:
@@ -116,7 +161,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
                 llm = GeminiLLMProvider()
                 result = await llm.generate(req.message)
                 reply_text = result["text"]
-
+                
                 # 3️⃣ Store in cache (best-effort)
                 await semantic_cache.set(
                     prompt=req.message,
@@ -180,11 +225,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
     except LLMProviderError as e:
         logger.exception("LLM provider failure", extra={"trace_id": trace_id})
         raise HTTPException(status_code=502, detail=str(e)) from e
-
     except HTTPException:
         logger.exception("HTTP error in /chat", extra={"trace_id": trace_id})
         raise
-
     except Exception as e:
         logger.exception("Unhandled error in /chat", extra={"trace_id": trace_id})
         raise HTTPException(status_code=500, detail="Internal server error") from e
