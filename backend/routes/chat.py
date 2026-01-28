@@ -48,6 +48,8 @@ class ChatResponse(BaseModel):
     reply: str
     mock: bool
     latency_ms: int
+    cache_hit: bool = False
+    cache_saved_ms: int = 0
 
 
 def _mock_llm_reply(user_message: str) -> str:
@@ -139,6 +141,10 @@ async def chat(req: ChatRequest):
         # NON-STREAMING MODE
         # ----------------------------
         
+        # Initialize cache tracking variables
+        cache_hit = False
+        cache_saved_ms = 0
+        
         # MOCK MODE
         if settings.use_mock_llm:
             reply_text = _mock_llm_reply(req.message)
@@ -152,21 +158,32 @@ async def chat(req: ChatRequest):
             cached = await semantic_cache.get(req.message)
             if cached:
                 reply_text = cached.get("response_text", "")
+                cache_hit = True
+                # Estimate time saved (typical Gemini call is ~800-2000ms)
+                cache_saved_ms = cached.get("original_latency_ms", 1200)
+                
                 logger.info(
                     "Reply served from semantic cache",
-                    extra={"trace_id": trace_id},
+                    extra={
+                        "trace_id": trace_id,
+                        "saved_ms": cache_saved_ms
+                    },
                 )
             else:
                 # 2️⃣ Call Gemini
                 llm = GeminiLLMProvider()
                 result = await llm.generate(req.message)
                 reply_text = result["text"]
+                llm_latency = result.get("latency_ms", 0)
                 
                 # 3️⃣ Store in cache (best-effort)
                 await semantic_cache.set(
                     prompt=req.message,
                     response_text=reply_text,
-                    metadata={"provider": provider},
+                    metadata={
+                        "provider": provider,
+                        "original_latency_ms": llm_latency
+                    },
                 )
 
         latency_ms = int((time.perf_counter() - start) * 1000)
@@ -182,6 +199,8 @@ async def chat(req: ChatRequest):
             "cost_usd": 0.0,
             "mock": settings.use_mock_llm,
             "provider": provider,
+            "cache_hit": cache_hit if not settings.use_mock_llm else False,
+            "cache_saved_ms": cache_saved_ms if not settings.use_mock_llm else 0,
             "session_id": req.session_id,
             "metadata": req.metadata or {},
             "steps": [
@@ -212,6 +231,7 @@ async def chat(req: ChatRequest):
                 "trace_id": trace_id,
                 "latency_ms": latency_ms,
                 "provider": provider,
+                "cache_hit": cache_hit,
             },
         )
 
@@ -220,6 +240,8 @@ async def chat(req: ChatRequest):
             reply=reply_text,
             mock=settings.use_mock_llm,
             latency_ms=latency_ms,
+            cache_hit=cache_hit if not settings.use_mock_llm else False,
+            cache_saved_ms=cache_saved_ms if not settings.use_mock_llm else 0,
         )
 
     except LLMProviderError as e:

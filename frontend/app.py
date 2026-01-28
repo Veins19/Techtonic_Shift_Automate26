@@ -74,7 +74,9 @@ def main() -> None:
 
         elif selected_page == "Request Details":
             logger.info("Navigating to Request Details")
-            st.info("🚧 Request Details page not implemented yet.")
+            from pages.request_details import render_request_details
+            render_request_details()
+
 
         else:
             logger.warning("Unknown navigation option selected")

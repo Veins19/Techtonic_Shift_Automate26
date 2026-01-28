@@ -236,7 +236,7 @@ def render_request_details():
         # --------------------------------------------------
         # Section 1: Request & Response
         # --------------------------------------------------
-        st.subheader(💬 Request & Response")
+        st.subheader("💬 Request & Response")
 
         col1, col2 = st.columns(2)
 
@@ -267,7 +267,7 @@ def render_request_details():
         # --------------------------------------------------
         # Section 2: Performance Metrics
         # --------------------------------------------------
-        st.subheader(⚡ Performance Metrics")
+        st.subheader("⚡ Performance Metrics")
 
         metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
 
@@ -303,7 +303,7 @@ def render_request_details():
         # --------------------------------------------------
         # Section 3: Trace Metadata
         # --------------------------------------------------
-        st.subheader(📋 Trace Metadata")
+        st.subheader("📋 Trace Metadata")
 
         metadata_col1, metadata_col2 = st.columns(2)
 
@@ -333,7 +333,7 @@ def render_request_details():
         # --------------------------------------------------
         # Section 4: Latency Breakdown
         # --------------------------------------------------
-        st.subheader(⏱ Latency Breakdown")
+        st.subheader("⏱ Latency Breakdown")
 
         steps = trace_detail.get("steps", [])
         if steps:
@@ -368,7 +368,7 @@ def render_request_details():
         # --------------------------------------------------
         # Section 5: Comparison with Other Traces
         # --------------------------------------------------
-        st.subheader(📊 Comparison with Recent Requests")
+        st.subheader("📊 Comparison with Recent Requests")
 
         # Create comparison data
         comparison_data = []

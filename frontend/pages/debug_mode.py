@@ -73,6 +73,20 @@ def _load_mock_traces() -> List[Dict[str, Any]]:
     return traces
 
 
+def fetch_system_stats() -> Dict[str, Any]:
+    """Fetch real-time system statistics from backend."""
+    try:
+        response = requests.get(f"{BACKEND_URL}/stats", timeout=10)
+        response.raise_for_status()
+        return {"success": True, "data": response.json()}
+    except requests.exceptions.ConnectionError:
+        logger.warning("Backend connection failed for stats")
+        return {"success": False, "error": "Backend unavailable"}
+    except Exception as e:
+        logger.exception(f"Failed to fetch stats: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
 def send_message_to_backend(message: str, stream: bool = False) -> Dict[str, Any]:
     """Send message to backend /chat endpoint and return response."""
     try:
@@ -109,6 +123,31 @@ def send_message_to_backend(message: str, stream: bool = False) -> Dict[str, Any
     except Exception as e:
         logger.exception(f"Failed to send message: {str(e)}")
         return {"success": False, "error": f"❌ Error: {str(e)}"}
+    
+def download_traces(format_type: str) -> Dict[str, Any]:
+    """Download all traces in specified format."""
+    try:
+        logger.info(f"Requesting trace export as {format_type}")
+        response = requests.get(
+            f"{BACKEND_URL}/export",
+            params={"format": format_type},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return {
+            "success": True,
+            "data": response.content,
+            "filename": response.headers.get(
+                "Content-Disposition", f"traces.{format_type}"
+            ).split("filename=")[-1],
+        }
+    except requests.exceptions.ConnectionError:
+        logger.warning("Backend connection failed for export")
+        return {"success": False, "error": "Backend unavailable"}
+    except Exception as e:
+        logger.exception(f"Failed to download traces: {str(e)}")
+        return {"success": False, "error": str(e)}
+
 
 
 def render_debug_dashboard():
@@ -122,6 +161,92 @@ def render_debug_dashboard():
         st.title("🧪 Debug Dashboard")
         st.caption("LLM Flight Recorder — Real-time AI responses with streaming")
         st.markdown("---")
+
+        # --------------------------------------------------
+        # ✨ REAL-TIME STATS DASHBOARD (NEW FEATURE)
+        # --------------------------------------------------
+        st.subheader("📊 Real-Time System Stats")
+        
+        stats_result = fetch_system_stats()
+        
+        if stats_result["success"]:
+            stats = stats_result["data"]
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.metric("Total Requests", stats.get("total_requests", 0))
+            
+            with col2:
+                cache_hit_rate = stats.get("cache_hit_rate", 0.0)
+                st.metric("Cache Hit Rate", f"{cache_hit_rate}%")
+            
+            with col3:
+                st.metric("Cache Hits", stats.get("total_cache_hits", 0))
+            
+            with col4:
+                avg_latency = stats.get("avg_latency_ms", 0)
+                st.metric("Avg Latency", f"{avg_latency}ms")
+            
+            with col5:
+                time_saved = stats.get("total_time_saved_ms", 0)
+                time_saved_sec = round(time_saved / 1000, 1)
+                st.metric("Time Saved", f"{time_saved_sec}s")
+            
+            # Show source badge
+            if stats.get("source") == "mock":
+                st.caption("⚠️ Showing mock stats (MongoDB not connected)")
+            else:
+                st.caption("✅ Live stats from MongoDB")
+        else:
+            st.warning("⚠️ Could not fetch stats from backend")
+        
+        st.markdown("---")
+        
+                # --------------------------------------------------
+        # ✨ EXPORT FUNCTIONALITY (NEW FEATURE)
+        # --------------------------------------------------
+        st.subheader("📥 Export Data")
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            st.write("Download all traces for offline analysis:")
+        
+        with col2:
+            if st.button("📄 Export JSON", use_container_width=True):
+                with st.spinner("Preparing JSON export..."):
+                    result = download_traces("json")
+                    if result["success"]:
+                        st.download_button(
+                            label="⬇️ Download JSON",
+                            data=result["data"],
+                            file_name=result["filename"],
+                            mime="application/json",
+                            use_container_width=True,
+                        )
+                        st.success("✅ JSON export ready!")
+                    else:
+                        st.error(f"Export failed: {result['error']}")
+        
+        with col3:
+            if st.button("📊 Export CSV", use_container_width=True):
+                with st.spinner("Preparing CSV export..."):
+                    result = download_traces("csv")
+                    if result["success"]:
+                        st.download_button(
+                            label="⬇️ Download CSV",
+                            data=result["data"],
+                            file_name=result["filename"],
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                        st.success("✅ CSV export ready!")
+                    else:
+                        st.error(f"Export failed: {result['error']}")
+        
+        st.markdown("---")
+
 
         # --------------------------------------------------
         # Chat Interface with Streaming
@@ -182,20 +307,37 @@ def render_debug_dashboard():
                     st.error(result.get("error", "Unknown error"))
             
             else:
-                # NON-STREAMING MODE (original)
+                # NON-STREAMING MODE with Cache Badges
                 with st.spinner("Sending message to backend..."):
                     result = send_message_to_backend(user_message, stream=False)
                 
                 if result["success"]:
-                    st.success("✅ Message sent successfully!")
                     response_data = result.get("data", {})
                     
-                    # Display response using correct field names from backend
+                    st.success("✅ Message sent successfully!")
+                    
+                    # ✨ CACHE STATUS BADGE
+                    cache_hit = response_data.get("cache_hit", False)
+                    cache_saved_ms = response_data.get("cache_saved_ms", 0)
+                    
+                    if cache_hit:
+                        st.info(f"🎯 **Cache HIT** — Saved {cache_saved_ms}ms (no API call made!)")
+                    else:
+                        st.warning("❌ **Cache MISS** — Fresh API call made")
+                    
+                    # Display response
                     st.write("**Response:**")
                     st.write(response_data.get("reply", "No response"))
-                    st.write(f"**Trace ID:** {response_data.get('trace_id', 'N/A')}")
-                    st.write(f"**Latency:** {response_data.get('latency_ms', 'N/A')}ms")
-                    st.write(f"**Mode:** {'Mock' if response_data.get('mock', False) else 'Live'}")
+                    
+                    # Metrics in columns
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Trace ID", response_data.get('trace_id', 'N/A')[:16] + "...")
+                    with col2:
+                        st.metric("Latency", f"{response_data.get('latency_ms', 'N/A')}ms")
+                    with col3:
+                        mode = 'Mock' if response_data.get('mock', False) else 'Live'
+                        st.metric("Mode", mode)
                 else:
                     st.error(result.get("error", "Unknown error"))
 
@@ -213,7 +355,7 @@ def render_debug_dashboard():
         # --------------------------------------------------
         # High-level metrics
         # --------------------------------------------------
-        st.subheader("📊 System Metrics")
+        st.subheader("📈 Mock Trace Metrics")
         
         col1, col2, col3, col4 = st.columns(4)
         
@@ -239,7 +381,7 @@ def render_debug_dashboard():
         # --------------------------------------------------
         # Charts
         # --------------------------------------------------
-        st.subheader("📈 Performance Trends")
+        st.subheader("📊 Performance Trends")
         
         latency_fig = render_latency_trend(traces)
         cost_fig = render_cost_distribution(traces)

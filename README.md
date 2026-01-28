@@ -139,7 +139,7 @@ USE_MOCK_LLM=True
 
 # Gemini (only required if USE_MOCK_LLM=False)
 GOOGLE_API_KEY=your_key_here
-GEMINI_MODEL_NAME=models/gemini-1.5-flash
+GEMINI_MODEL_NAME=models/gemini-2.5-flash
 
 # MongoDB (optional, enables persistence)
 MONGODB_URI=mongodb://localhost:27017
