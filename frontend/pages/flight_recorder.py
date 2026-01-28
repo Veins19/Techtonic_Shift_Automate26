@@ -1,30 +1,20 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 import streamlit as st
 import requests
-from datetime import datetime
 
 from ui_components.charts import render_latency_waterfall
 from ui_components.trace_viewer import render_trace_viewer
 
-# --------------------------------------------------
-# Logger setup
-# --------------------------------------------------
 logger = logging.getLogger(__name__)
 
-# --------------------------------------------------
-# Backend configuration
-# --------------------------------------------------
 BACKEND_URL = "http://localhost:8000"
 
 
 @st.cache_data(ttl=30)
 def fetch_traces_list(page: int = 1, limit: int = 20) -> Optional[Dict[str, Any]]:
-    """
-    Fetch list of traces from backend API.
-    Cached for 30 seconds to avoid excessive API calls.
-    """
+    """Fetch list of traces from backend API. Cached for 30 seconds."""
     try:
         logger.info(f"Fetching traces list from backend: page={page}, limit={limit}")
         response = requests.get(
@@ -45,10 +35,7 @@ def fetch_traces_list(page: int = 1, limit: int = 20) -> Optional[Dict[str, Any]
 
 
 def fetch_trace_detail(trace_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Fetch detailed trace data from backend API.
-    Not cached because we want fresh data for detailed view.
-    """
+    """Fetch detailed trace data from backend API."""
     try:
         logger.info(f"Fetching trace detail from backend: trace_id={trace_id}")
         response = requests.get(
@@ -68,16 +55,14 @@ def fetch_trace_detail(trace_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _generate_mock_traces_list(page: int = 1, limit: int = 20) -> Dict[str, Any]:
-    """
-    Generate mock traces list for fallback when backend is unavailable.
-    """
+    """Generate mock traces list for fallback when backend is unavailable."""
     from uuid import uuid4
     from datetime import datetime, timedelta
 
     now = datetime.utcnow()
     items = []
-
     start = (page - 1) * limit
+
     for i in range(start, start + limit):
         items.append(
             {
@@ -102,9 +87,7 @@ def _generate_mock_traces_list(page: int = 1, limit: int = 20) -> Dict[str, Any]
 
 
 def _generate_mock_trace_detail(trace_id: str) -> Dict[str, Any]:
-    """
-    Generate mock trace detail for fallback when backend is unavailable.
-    """
+    """Generate mock trace detail for fallback when backend is unavailable."""
     from datetime import datetime
 
     return {
@@ -157,6 +140,7 @@ def _generate_mock_trace_detail(trace_id: str) -> Dict[str, Any]:
 def render_flight_recorder():
     """
     Main Flight Recorder page.
+
     Displays traces list with ability to select and replay individual traces.
     Integrates with real backend API.
     """
@@ -165,17 +149,13 @@ def render_flight_recorder():
 
         st.title("🎬 Flight Recorder")
         st.caption("Step-by-step trace replay and debugging")
-
         st.markdown("---")
 
-        # --------------------------------------------------
         # Fetch traces list
-        # --------------------------------------------------
         traces_data = fetch_traces_list(page=1, limit=20)
+
         if traces_data is None:
-            st.warning(
-                "⚠️ Backend unavailable. Using mock data for demonstration."
-            )
+            st.warning("⚠️ Backend unavailable. Using mock data for demonstration.")
             traces_data = _generate_mock_traces_list(page=1, limit=20)
             is_mock = True
         else:
@@ -186,14 +166,13 @@ def render_flight_recorder():
 
         if not traces:
             st.info(
-                "📊 No traces available yet. Send a message through the Chat endpoint to generate traces."
+                "📊 No traces available yet. Send a message through the Chat "
+                "endpoint to generate traces."
             )
             logger.info("No traces available")
             return
 
-        # --------------------------------------------------
         # Display data source info
-        # --------------------------------------------------
         col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader(f"📋 Available Traces ({len(traces)})")
@@ -205,13 +184,12 @@ def render_flight_recorder():
 
         st.markdown("---")
 
-        # --------------------------------------------------
         # Trace selection
-        # --------------------------------------------------
         trace_options = [
             f"{t['created_at']} | {t['message_preview'][:40]}... | {t['latency_ms']}ms"
             for t in traces
         ]
+
         selected_option = st.selectbox(
             "Select a trace to replay:",
             options=range(len(traces)),
@@ -223,12 +201,10 @@ def render_flight_recorder():
 
         st.markdown("---")
 
-        # --------------------------------------------------
         # Fetch and display detailed trace
-        # --------------------------------------------------
         st.subheader("🔍 Trace Details")
-
         trace_detail_response = fetch_trace_detail(selected_trace_id)
+
         if trace_detail_response is None:
             st.warning("Could not fetch trace details. Using mock data.")
             trace_detail_response = _generate_mock_trace_detail(selected_trace_id)
@@ -236,27 +212,23 @@ def render_flight_recorder():
         trace_detail = trace_detail_response.get("trace", {})
         detail_source = trace_detail_response.get("source", "unknown")
 
-        # Display trace metadata
+        # Metadata
         col1, col2, col3, col4 = st.columns(4)
-
         with col1:
             st.metric(
                 "Trace ID",
                 trace_detail.get("trace_id", "N/A")[:16] + "...",
             )
-
         with col2:
             st.metric(
                 "Latency",
                 f"{trace_detail.get('latency_ms', 0)}ms",
             )
-
         with col3:
             st.metric(
                 "Cost",
                 f"${trace_detail.get('cost_usd', 0):.4f}",
             )
-
         with col4:
             tokens = trace_detail.get("tokens_used", "N/A")
             if isinstance(tokens, int):
@@ -266,21 +238,15 @@ def render_flight_recorder():
 
         st.markdown("---")
 
-        # Display trace summary
+        # Summary
         st.subheader("📝 Trace Summary")
         summary_col1, summary_col2 = st.columns(2)
-
         with summary_col1:
-            st.write(
-                f"**Created At:** {trace_detail.get('created_at', 'N/A')}"
-            )
-            st.write(
-                f"**Message:** {trace_detail.get('message_preview', 'N/A')}"
-            )
+            st.write(f"**Created At:** {trace_detail.get('created_at', 'N/A')}")
+            st.write(f"**Message:** {trace_detail.get('message_preview', 'N/A')}")
             cache_hit = trace_detail.get("cache_hit", False)
             cache_status = "✅ Cache Hit" if cache_hit else "❌ Cache Miss"
             st.write(f"**Cache:** {cache_status}")
-
         with summary_col2:
             st.write(f"**Source:** `{detail_source}`")
             st.write(
@@ -289,16 +255,13 @@ def render_flight_recorder():
 
         st.markdown("---")
 
-        # --------------------------------------------------
-        # Step-by-step trace replay
-        # --------------------------------------------------
+        # Execution timeline
         st.subheader("🎬 Execution Timeline")
-
         steps = trace_detail.get("steps", [])
+
         if not steps:
             st.info("No steps available for this trace.")
         else:
-            # Display latency waterfall chart
             step_data = [
                 {"name": s.get("name", "unknown"), "ms": s.get("latency_ms", 0)}
                 for s in steps
@@ -307,8 +270,6 @@ def render_flight_recorder():
             st.plotly_chart(waterfall_fig, use_container_width=True)
 
             st.markdown("---")
-
-            # Display step-by-step execution
             st.subheader("📍 Step-by-Step Execution")
             render_trace_viewer(
                 trace_id=selected_trace_id,
@@ -317,15 +278,15 @@ def render_flight_recorder():
 
         st.markdown("---")
 
-        # --------------------------------------------------
         # Debug section
-        # --------------------------------------------------
         with st.expander("🔧 Debug Information"):
             st.write("**Full Trace Data (JSON):**")
             st.json(trace_detail)
             st.write(f"**Data Source:** {detail_source}")
 
-        logger.info(f"Flight Recorder page rendered successfully for trace {selected_trace_id}")
+        logger.info(
+            f"Flight Recorder page rendered successfully for trace {selected_trace_id}"
+        )
 
     except Exception as e:
         logger.exception("Failed to render Flight Recorder page")

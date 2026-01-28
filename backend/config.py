@@ -11,6 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # -------------------------------
 # Logging setup (backend-wide)
 # -------------------------------
+
+
 def _configure_logging(log_level: str) -> None:
     """
     Configure root logging once, with timestamps.
@@ -20,7 +22,6 @@ def _configure_logging(log_level: str) -> None:
     - Timestamped logs are essential for debugging distributed/async flows.
     """
     level = getattr(logging, (log_level or "INFO").upper(), logging.INFO)
-
     root = logging.getLogger()
     if root.handlers:
         root.setLevel(level)
@@ -37,6 +38,8 @@ logger = logging.getLogger("backend.config")
 # -------------------------------
 # Settings (Pydantic v2)
 # -------------------------------
+
+
 class Settings(BaseSettings):
     """
     Central typed config for the whole backend.
@@ -58,34 +61,40 @@ class Settings(BaseSettings):
     # -------------------------------
     # App
     # -------------------------------
+
     api_env: Literal["development", "staging", "production"] = Field(
         default="development", alias="API_ENV"
     )
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     # -------------------------------
     # Feature toggles
     # -------------------------------
+
     use_mock_llm: bool = Field(default=True, alias="USE_MOCK_LLM")
 
     # -------------------------------
     # Google Gemini (LLM Provider)
     # -------------------------------
+
     # Exposed with provider-friendly names
     gemini_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     gemini_model_name: str = Field(
-        default="models/gemini-1.5-flash",
+        default="gemini-1.5-flash-001",
         alias="GEMINI_MODEL_NAME",
     )
 
     # -------------------------------
     # MongoDB
     # -------------------------------
+
     mongodb_uri: Optional[str] = Field(default=None, alias="MONGODB_URI")
     mongodb_db_name: str = Field(default="llm_flight_recorder", alias="MONGODB_DB_NAME")
     mongodb_traces_collection: str = Field(
         default="traces", alias="MONGODB_TRACES_COLLECTION"
     )
+
     mongodb_cache_collection: str = Field(
         default="semantic_cache", alias="MONGODB_CACHE_COLLECTION"
     )
@@ -93,6 +102,7 @@ class Settings(BaseSettings):
     # -------------------------------
     # Rate limits
     # -------------------------------
+
     max_rpm: int = Field(default=25, alias="MAX_RPM")
     max_rpd: int = Field(default=14000, alias="MAX_RPD")
 
@@ -115,12 +125,11 @@ def get_settings() -> Settings:
         # -------------------------------
         # Conditional validation
         # -------------------------------
+
         if not settings.use_mock_llm:
             missing = []
-
             if not settings.gemini_api_key:
                 missing.append("GOOGLE_API_KEY")
-
             if not settings.mongodb_uri:
                 missing.append("MONGODB_URI")
 
@@ -152,8 +161,5 @@ def get_settings() -> Settings:
         _configure_logging(os.getenv("LOG_LEVEL", "INFO"))
         logger.exception("Settings validation error")
         raise
-
     except Exception:
-        _configure_logging(os.getenv("LOG_LEVEL", "INFO"))
-        logger.exception("Failed to load settings")
-        raise
+        _configure_

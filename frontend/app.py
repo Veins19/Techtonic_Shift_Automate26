@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import logging
+
 import streamlit as st
 
 # --------------------------------------------------
 # Logging setup (frontend-safe)
 # --------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -31,6 +33,7 @@ def main() -> None:
         # --------------------------------------------------
         # Page configuration (MUST be first Streamlit call)
         # --------------------------------------------------
+
         st.set_page_config(
             page_title="LLM Flight Recorder",
             page_icon="🛫",
@@ -43,6 +46,7 @@ def main() -> None:
         # --------------------------------------------------
         # Sidebar
         # --------------------------------------------------
+
         st.sidebar.title("🛫 LLM Flight Recorder")
         st.sidebar.markdown("---")
 
@@ -61,15 +65,18 @@ def main() -> None:
         # --------------------------------------------------
         # Routing
         # --------------------------------------------------
+
         if selected_page == "Debug Dashboard":
             logger.info("Navigating to Debug Dashboard")
             from pages.debug_mode import render_debug_dashboard
+
             render_debug_dashboard()
 
         elif selected_page == "Flight Recorder":
             logger.info("Navigating to Flight Recorder")
-            from pages.flight_recorder import render_flight_recorder_page
-            render_flight_recorder_page()
+            from pages.flight_recorder import render_flight_recorder
+
+            render_flight_recorder()
 
         elif selected_page == "Request Details":
             logger.info("Navigating to Request Details")
